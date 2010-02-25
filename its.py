@@ -6,11 +6,10 @@ import sys
 import ConfigParser
 from  subprocess import call
 
-#TODO make config file
-
 DEFAULT_CONFIG = 'its.default.conf'
 ETC_CONFIG = '/etc/its.conf'
 
+verbose = False
 
 def parse_courierdb(db_fn, spam_keyword, ham_keyword):
     """Parses a given Courier IMAP keyword database file and returns a list of
@@ -73,15 +72,17 @@ def get_keyword_dbs(path, db_dirname_scheme):
 
 def teach_spamassassin(filenames, sa_learn_path, spam=True):
     """calls sa-learn to teach spamassissin"""
+    global verbose
     try:
         for file in filenames:
-            if spam:
-                if call([sa_learn_path, '--spam', file]) != 0:
+                if call([sa_learn_path, {True:'--spam', False:'--ham'}[spam],\
+                                                                    file]) != 0:
                     print "ERROR calling" + sa_learn_path + ". Something went\
 wrong"
                     sys.exit(1)
-            else:
-                call([sa_learn_path, '--ham', file])
+                elif verbose:
+                    print "   --> teached " + {True:'spam', False:'ham'}[spam] + ": "\
+                        + "..." + file[-40:]
     except OSError:
         print "ERROR: Couldn't call" + sa_learn_path +\
                                                 ". Perhaps it doesn't exist?"
@@ -97,7 +98,8 @@ def usage():
 def main():
     """The main function"""
 
-    configfile = ""
+    global verbose
+    configfile = ''
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'hc:v', ['help','config'])
@@ -113,7 +115,6 @@ def main():
         usage()
         sys.exit(2)
 
-    verbose = False
     for optlist, arguments in opts:
         if optlist == '-v':
             verbose = True
@@ -138,10 +139,15 @@ def main():
     spam = []
     ham  = []
 
+    last_value = (0,0)
+
     try:
 
         for db in get_keyword_dbs(args[0], config.get('mailserver',
                                           'keyword_dirname_scheme')):
+
+            if verbose:
+                print "Found DB: " + db
 
             tagged_mailes = parse_courierdb(db,
                                        config.get('mailclient', 'spam_keyword'),
@@ -149,6 +155,14 @@ def main():
 
             spam.extend(get_path_from_filename(args[0], tagged_mailes['spam']))
             ham.extend(get_path_from_filename(args[0], tagged_mailes['ham']))
+
+            if verbose:
+                print "  --> Found %d spam and %d ham mails" % \
+                        (len(spam) - last_value[0], len(ham) - last_value[1])
+                last_value = len(spam), len(ham)
+
+        if verbose:
+            print "\nNow the teaching beginns...\n"
 
         teach_spamassassin(spam, config.get('spamassassin', 'sa_learn_path'))
         teach_spamassassin(ham, config.get('spamassassin', 'sa_learn_path'),
@@ -158,6 +172,8 @@ def main():
         print "ERROR: Configfile ist corrupt. Please check it and look at\
  'its.default.conf'"
         sys.exit(1)
+
+
 
 if __name__ == '__main__':
     main()
