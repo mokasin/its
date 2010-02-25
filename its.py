@@ -4,6 +4,7 @@ import os
 import getopt
 import sys
 import ConfigParser
+from  subprocess import call
 
 #TODO make config file
 
@@ -63,7 +64,8 @@ def get_keyword_dbs(path, db_dirname_scheme):
     for root, dirs, files in os.walk(path):
         for file in files:
             for i in range(1, len(db_dirname_scheme.split('/'))):
-                if os.path.join(root,file).split('/')[-i] == db_dirname_scheme.split('/')[-i]:
+                if os.path.join(root,file).split('/')[-i] ==\
+                                            db_dirname_scheme.split('/')[-i]:
                     result.append(os.path.join(root,file))
 
     return result
@@ -71,16 +73,19 @@ def get_keyword_dbs(path, db_dirname_scheme):
 
 def teach_spamassassin(filenames, sa_learn_path, spam=True):
     """calls sa-learn to teach spamassissin"""
-
-    #TODO Implement this functionality
-
-    if spam:
-        print("Now comes the spam:")
-    else:
-        print("Now comes the ham:")
-
-    print filenames
-
+    try:
+        for file in filenames:
+            if spam:
+                if call([sa_learn_path, '--spam', file]) != 0:
+                    print "ERROR calling" + sa_learn_path + ". Something went\
+wrong"
+                    sys.exit(1)
+            else:
+                call([sa_learn_path, '--ham', file])
+    except OSError:
+        print "ERROR: Couldn't call" + sa_learn_path +\
+                                                ". Perhaps it doesn't exist?"
+        sys.exit(1)
 
 def usage():
     """prints out the usage options"""
@@ -100,7 +105,7 @@ def main():
         if len(args) != 1:
             print "Please give (only) one path to act on."
             usage()
-            sys.exit()
+            sys.exit(2)
 
     except getopt.GetoptError, err:
         # print help information and exit:
@@ -114,7 +119,7 @@ def main():
             verbose = True
         elif optlist in ('-h', '--help'):
             usage()
-            sys.exit()
+            sys.exit(2)
         elif optlist in ('-c', '--config'):
             configfile = arguments
         else:
@@ -127,7 +132,7 @@ def main():
         print("Please specify a configuration file. Copy 'its.default.conf'"
                     "to '/etc/its.conf' or specify your own using the '-c'")
         usage()
-        sys.exit()
+        sys.exit(2)
 
 
     spam = []
@@ -138,18 +143,21 @@ def main():
         for db in get_keyword_dbs(args[0], config.get('mailserver',
                                           'keyword_dirname_scheme')):
 
-            tagged_mailes = parse_courierdb(db, config.get('mailclient',
-                        'spam_keyword'), config.get('mailclient', 'ham_keyword'))
+            tagged_mailes = parse_courierdb(db,
+                                       config.get('mailclient', 'spam_keyword'),
+                                       config.get('mailclient', 'ham_keyword'))
 
             spam.extend(get_path_from_filename(args[0], tagged_mailes['spam']))
             ham.extend(get_path_from_filename(args[0], tagged_mailes['ham']))
 
         teach_spamassassin(spam, config.get('spamassassin', 'sa_learn_path'))
-        teach_spamassassin(ham, config.get('spamassassin', 'sa_learn_path'), False)
+        teach_spamassassin(ham, config.get('spamassassin', 'sa_learn_path'),
+                                                                        False)
+
     except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
         print "ERROR: Configfile ist corrupt. Please check it and look at\
  'its.default.conf'"
-        sys.exit()
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
