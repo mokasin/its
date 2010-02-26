@@ -10,6 +10,7 @@ import os
 import getopt
 import sys
 import ConfigParser
+import re
 from  subprocess import call
 from copy import deepcopy
 
@@ -21,6 +22,29 @@ verbose        = False
 vverbose       = False
 
 
+def parse_mail_header(filename):
+    """It returns a tuple with (from,subject) from a given filename"""
+
+    rex_from    = re.compile('^from: .*', re.I)
+    rex_subject = re.compile('^subject: .*', re.I)
+
+    m_from      = ''
+    m_subject   = ''
+
+    f = open(filename, 'r')
+    try:
+        for line in f:
+            if m_from != '' and m_subject != '': break
+            if rex_from.match(line) != None:
+                m_from = line[6:]
+            if rex_subject.match(line) != None:
+                m_subject = line[9:]
+
+    finally:
+        f.close()
+
+    #remove trailing \n
+    return m_from[:-1], m_subject[:-1]
 
 def parse_courierdb(db_fn, spam_keyword, ham_keyword):
     """Parses a given Courier IMAP keyword database file and returns a list of\
@@ -104,8 +128,12 @@ def teach_spamassassin(spham_filenames, sa_learn_path):
                         print "ERROR calling" + sa_learn_path + \
                         ". Something went wrong."
                         sys.exit(1)
-                    elif verbose:
+                    elif verbose and not vverbose:
                         print "   --> teached " + key + ": ..." + file[-40:]
+                    elif verbose and vverbose:
+                        m_from, m_subject = parse_mail_header(file)
+                        print "   --> teached " + key + ": ..." + file[-30:] + \
+                            " | FROM: " + m_from + ' | SUBJECT: ' + m_subject
     except OSError:
         print "ERROR: Couldn't call" + sa_learn_path +\
                                                 ". Perhaps it doesn't exist?"
@@ -191,8 +219,6 @@ def main():
         usage()
         sys.exit(2)
 
-    print verbose
-    print vverbose
 
     try:
 
