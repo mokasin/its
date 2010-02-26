@@ -17,7 +17,10 @@ DEFAULT_CONFIG = 'its.default.conf'
 ETC_CONFIG     = '/etc/its.conf'
 VERSION        = '0.1'
 
-verbose = False
+verbose        = False
+vverbose       = False
+
+
 
 def parse_courierdb(db_fn, spam_keyword, ham_keyword):
     """Parses a given Courier IMAP keyword database file and returns a list of\
@@ -146,6 +149,8 @@ def main():
     """The main function"""
 
     global verbose
+    global vverbose
+
     configfile = ''
 
     try:
@@ -167,6 +172,7 @@ def main():
 
     for optlist, arguments in opts:
         if optlist == '-v':
+            vverbose = verbose
             verbose = True
         elif optlist in ('-h', '--help'):
             usage()
@@ -185,6 +191,8 @@ def main():
         usage()
         sys.exit(2)
 
+    print verbose
+    print vverbose
 
     try:
 
