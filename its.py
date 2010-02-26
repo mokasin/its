@@ -1,19 +1,27 @@
 #!/usr/bin/env python
 
+"""License: GPLv2
+Copyright: mokasin, 2010
+Only for use with Courier IMAP
+"""
+import os.path
+
 import os
 import getopt
 import sys
 import ConfigParser
 from  subprocess import call
+from copy import deepcopy
 
 DEFAULT_CONFIG = 'its.default.conf'
-ETC_CONFIG = '/etc/its.conf'
+ETC_CONFIG     = '/etc/its.conf'
+VERSION        = '0.1'
 
 verbose = False
 
 def parse_courierdb(db_fn, spam_keyword, ham_keyword):
-    """Parses a given Courier IMAP keyword database file and returns a list of
-        spam or ham mails identified by the given keyword"""
+    """Parses a given Courier IMAP keyword database file and returns a list of\
+ spam or ham mails identified by the given keyword"""
 
     f = open(db_fn, 'r')
     try:
@@ -42,15 +50,29 @@ def parse_courierdb(db_fn, spam_keyword, ham_keyword):
         f.close()
 
 
-def get_path_from_filename(path, filenames):
-    """Looking for a file in path"""
-    result = []
 
-    for filename in filenames:
-        for root, dirs, files in os.walk(path):
-            for file in files:
-                if file.split(':')[0] == filename:
-                    result.append(os.path.join(root, file))
+def get_path_from_filename(path, spam_ham_dict):
+    """Looking for a file in path"""
+
+    result = {'spam':[], 'ham':[]}
+
+    spam_ham_dict_copy = deepcopy(spam_ham_dict)
+
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            #key has values: spam, ham
+            for key in spam_ham_dict:
+                try:
+                    #if the filename was found
+                    index = spam_ham_dict_copy[key].index(file.split(':')[0])
+
+                    #add it to result and kick out the associated mail name
+                    result[key].append(os.path.join(root, file))
+                    del spam_ham_dict_copy[key][index]
+                except:
+                    #just continue if ValueError is raised, because the mail
+                    #isn't found by index or any other error occured
+                    continue
 
     return result
 
@@ -70,28 +92,53 @@ def get_keyword_dbs(path, db_dirname_scheme):
     return result
 
 
-def teach_spamassassin(filenames, sa_learn_path, spam=True):
+def teach_spamassassin(spham_filenames, sa_learn_path):
     """calls sa-learn to teach spamassissin"""
-    global verbose
     try:
-        for file in filenames:
-                if call([sa_learn_path, {True:'--spam', False:'--ham'}[spam],\
-                                                                    file]) != 0:
-                    print "ERROR calling" + sa_learn_path + ". Something went\
-wrong"
-                    sys.exit(1)
-                elif verbose:
-                    print "   --> teached " + {True:'spam', False:'ham'}[spam] + ": "\
-                        + "..." + file[-40:]
+        for key in spham_filenames:
+            for file in spham_filenames[key]:
+                    if call([sa_learn_path, '--' + key, file]) != 0:
+                        print "ERROR calling" + sa_learn_path + \
+                        ". Something went wrong."
+                        sys.exit(1)
+                    elif verbose:
+                        print "   --> teached " + key + ": ..." + file[-40:]
     except OSError:
         print "ERROR: Couldn't call" + sa_learn_path +\
                                                 ". Perhaps it doesn't exist?"
         sys.exit(1)
 
+
+
+
 def usage():
     """prints out the usage options"""
 
-    print("TODO: How to use")
+    s = sys.stdout
+
+    s.write(
+"""IMAP's Teaching Spamassassin v{version} Copyright 2010 mokasin GPLv2
+
+USAGE
+its.py [-c configfile|--config configfile] [-v] [-h|--help] path
+
+    -h                This help
+    --help
+    -c configfile     give path to config file other than '{etc_config}'
+    -v                be verbose
+
+WHAT IT DOES
+This script crawls 'path' for a CourierIMAP keyword database. The database's
+filename is found using the 'keyword_dirname_scheme'. It searches for IMAP key-
+words defined in the configfile ('spam_keyword', 'ham_keyword') to find flagged
+spam or ham mails and finally give them to sa-learn to teach Spamassassin.
+
+CONFIGFILE
+
+Look at 'its.default.config' for a commented version with presettings for
+Thunderbird.
+""".format(version=VERSION, etc_config=ETC_CONFIG))
+
 
 
 
@@ -108,6 +155,9 @@ def main():
             print "Please give (only) one path to act on."
             usage()
             sys.exit(2)
+        elif not os.path.exists(args[0]):
+            print "ERORR: Given path doesn't exist."
+            sys.exit(1)
 
     except getopt.GetoptError, err:
         # print help information and exit:
@@ -127,7 +177,7 @@ def main():
             assert False, 'unhandled option'
 
     # now the action
-
+    
     config = ConfigParser.RawConfigParser()
     if config.read([ETC_CONFIG, configfile]) == []:
         print("Please specify a configuration file. Copy 'its.default.conf'"
@@ -136,37 +186,42 @@ def main():
         sys.exit(2)
 
 
-    spam = []
-    ham  = []
-
-    last_value = (0,0)
-
     try:
 
         for db in get_keyword_dbs(args[0], config.get('mailserver',
                                           'keyword_dirname_scheme')):
 
             if verbose:
-                print "Found DB: " + db
+                print "\nFound DB:  " + db
 
             tagged_mailes = parse_courierdb(db,
                                        config.get('mailclient', 'spam_keyword'),
                                        config.get('mailclient', 'ham_keyword'))
 
-            spam.extend(get_path_from_filename(args[0], tagged_mailes['spam']))
-            ham.extend(get_path_from_filename(args[0], tagged_mailes['ham']))
+            try:
+                #crawl only maildir where the db was found
+                #it' uneccessary to crawl every path
+                path = db[:db.index(config.get('mailserver','maildir_scheme'))\
+                            + len(config.get('mailserver', 'maildir_scheme'))]
+                if verbose:
+                    print "Looking in " + path + " for tagged mails."
+            except ValueError:
+                path = args[0]
+
+            spham_filenames = get_path_from_filename(path, tagged_mailes)
 
             if verbose:
                 print "  --> Found %d spam and %d ham mails" % \
-                        (len(spam) - last_value[0], len(ham) - last_value[1])
-                last_value = len(spam), len(ham)
+               (len(spham_filenames['spam']), len(spham_filenames['ham']))
 
-        if verbose:
-            print "\nNow the teaching beginns...\n"
+            if verbose:
+                print "\nNow the teaching beginns...\n"
 
-        teach_spamassassin(spam, config.get('spamassassin', 'sa_learn_path'))
-        teach_spamassassin(ham, config.get('spamassassin', 'sa_learn_path'),
-                                                                        False)
+            teach_spamassassin(spham_filenames, config.get('spamassassin',
+                                                            'sa_learn_path'))
+            if verbose:
+                print '-'*80
+
 
     except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
         print "ERROR: Configfile ist corrupt. Please check it and look at\
