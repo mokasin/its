@@ -248,7 +248,9 @@ def main():
                 print "  --> Found %d spam and %d ham mails" % \
                (len(spham_filenames['spam']), len(spham_filenames['ham']))
 
-            if verbose:
+            if (verbose and \
+                   (len(spham_filenames['spam']) > 0 \
+                or  len(spham_filenames['ham']) > 0 )):
                 print "\nNow the teaching beginns...\n"
 
             teach_spamassassin(spham_filenames, config.get('spamassassin',
