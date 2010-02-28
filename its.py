@@ -16,7 +16,7 @@ from copy import deepcopy
 
 DEFAULT_CONFIG = 'its.default.conf'
 ETC_CONFIG     = '/etc/its.conf'
-VERSION        = '0.1'
+VERSION        = '0.1RC2'
 
 verbose        = False
 vverbose       = False
@@ -46,30 +46,43 @@ def parse_mail_header(filename):
     #remove trailing \n
     return m_from[:-1], m_subject[:-1]
 
-def parse_courierdb(db_fn, spam_keyword, ham_keyword):
+def parse_courierdb(db_fn, spham_keywords):
     """Parses a given Courier IMAP keyword database file and returns a list of\
  spam or ham mails identified by the given keyword"""
 
     f = open(db_fn, 'r')
     try:
 
-        result = dict( [ ('spam', []), ('ham', []) ] )
-        keywords = dict()
+        result = {'spam': [], 'ham': []}
+        kw_indeces = dict()
+
         n = 0
         line = f.readline()
 
         while line != '\n':
-            keywords[line[:-1]] = str(n)
+            #find spam/ham index --> [:-1] to snip trailing \n
+            if line[:-1] in spham_keywords.keys():
+                kw_indeces[spham_keywords[line[:-1]]] = str(n)
             n += 1
             line = f.readline()
 
+        #find mails tagged as spam/ham
         for line in f:
-            for index in line.split(':')[1].split():
-                if index == keywords.get(spam_keyword, '-1'):
-                    result['spam'].append(line[:-1].split(':')[0])
+            #indeces of keywords the mail is marked with
+            tmp = line.split(':')[1].split()
 
-                elif index == keywords.get(ham_keyword, '-1'):
-                    result['ham'].append(line[:-1].split(':')[0])
+            #if there are marked spam AND ham mails
+            if len(kw_indeces) == 2:
+                #if the mail is marked as spam AND ham, don't know which to
+                #prefere, so continue
+                if kw_indeces['spam'] in tmp and kw_indeces['ham'] in tmp:
+                    continue
+
+            #key is one of 'spam', 'ham'
+            for key in kw_indeces:
+                if kw_indeces[key] in tmp:
+                    #append mailname to spam or ham result list
+                    result[key].append(line.split(':')[0])
 
         return result
 
@@ -229,8 +242,8 @@ def main():
                 print "\nFound DB:  " + db
 
             tagged_mailes = parse_courierdb(db,
-                                       config.get('mailclient', 'spam_keyword'),
-                                       config.get('mailclient', 'ham_keyword'))
+                              {config.get('mailclient', 'spam_keyword'): 'spam',
+                               config.get('mailclient', 'ham_keyword'): 'ham'})
 
             try:
                 #crawl only maildir where the db was found
