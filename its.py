@@ -46,43 +46,61 @@ def parse_mail_header(filename):
     #remove trailing \n
     return m_from[:-1], m_subject[:-1]
 
-def parse_courierdb(db_fn, spham_keywords):
+def parse_courierdb(db_fn, spham_keywords, case_sensitive=False):
     """Parses a given Courier IMAP keyword database file and returns a list of\
  spam or ham mails identified by the given keyword"""
+
+    def classify(actual, kw_indices):
+        spam = False
+        ham = False
+
+        for i in actual:
+            if not spam and i in kw_indices['spam']:
+                spam = True
+            if not ham and i in kw_indices['ham']:
+                ham = True
+
+        return spam, ham
 
     f = open(db_fn, 'r')
     try:
 
         result = {'spam': [], 'ham': []}
-        kw_indeces = dict()
+        kw_indices = {'spam': [], 'ham': []}
 
         n = 0
         line = f.readline()
 
         while line != '\n':
             #find spam/ham index --> [:-1] to snip trailing \n
-            if line[:-1] in spham_keywords.keys():
-                kw_indeces[spham_keywords[line[:-1]]] = str(n)
+            if not case_sensitive:
+                line = line.lower()
+
+            for key in spham_keywords:
+                if line[:-1] in spham_keywords[key]:
+                    kw_indices[key].append(str(n))
+
             n += 1
             line = f.readline()
+
 
         #find mails tagged as spam/ham
         for line in f:
             #indeces of keywords the mail is marked with
-            tmp = line.split(':')[1].split()
+            tmp = classify(line.split(':')[1].split(), kw_indices)
 
             #if there are marked spam AND ham mails
-            if len(kw_indeces) == 2:
+            if kw_indices['spam'] != [] and kw_indices['ham'] != []:
                 #if the mail is marked as spam AND ham, don't know which to
                 #prefere, so continue
-                if kw_indeces['spam'] in tmp and kw_indeces['ham'] in tmp:
+                if tmp == (True,True):
                     continue
 
-            #key is one of 'spam', 'ham'
-            for key in kw_indeces:
-                if kw_indeces[key] in tmp:
-                    #append mailname to spam or ham result list
-                    result[key].append(line.split(':')[0])
+                #append mailname to spam or ham result list
+            if tmp[0]:
+                result['spam'].append(line.split(':')[0])
+            if tmp[1]:
+                result['ham'].append(line.split(':')[0])
 
         return result
 
@@ -241,9 +259,16 @@ def main():
             if verbose:
                 print "\nFound DB:  " + db
 
-            tagged_mailes = parse_courierdb(db,
-                              {config.get('mailclient', 'spam_keyword'): 'spam',
-                               config.get('mailclient', 'ham_keyword'): 'ham'})
+            if config.get('mailclient', 'case_sensitive').lower() == 'true':
+                tagged_mailes = parse_courierdb(db,
+                   {'spam': config.get('mailclient', 'spam_keyword').split(','),
+                    'ham': config.get('mailclient', 'ham_keyword').split(',')},
+                    True)
+            else:
+                tagged_mailes = parse_courierdb(db,
+           {'spam': config.get('mailclient', 'spam_keyword').lower().split(','),
+            'ham': config.get('mailclient', 'ham_keyword').lower().split(',')})
+
 
             try:
                 #crawl only maildir where the db was found
@@ -281,3 +306,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
