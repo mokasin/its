@@ -107,7 +107,8 @@ def get_path_from_filename(path, spam_ham_dict):
                     index = spam_ham_dict_copy[key].index(file.split(':')[0])
 
                     #add it to result and kick out the associated mail name
-                    result[key].append(os.path.join(root, file))
+                    result[key].append(os.path.realpath(
+                                                    os.path.join(root, file)))
                     del spam_ham_dict_copy[key][index]
                 except:
                     #just continue if ValueError is raised, because the mail
