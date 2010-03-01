@@ -1,0 +1,18 @@
+USE IT ON YOUR OWN RESPONSIBILITY. NO WARRANTY GIVEN!
+
+This is a little helper script to teach Spamassassin through Thunderbird using
+Courier IMAP.
+
+When using IMAP, Thunderbird tags marked spam or ham mails on the server. The
+script read those tags and feeds sa-learn with the corresponding emails.
+
+Look at the contributed config file (which has sane pre-settings already) and
+run the script like
+
+its.py -c myconfigfile /path/to/my/mails
+
+on a regulary basis.
+
+-c can be ommited if /etc/its.conf exists.
+
+Have fun.
