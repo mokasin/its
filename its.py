@@ -125,9 +125,8 @@ def get_keyword_dbs(path, db_dirname_scheme):
 
     for root, dirs, files in os.walk(path):
         for file in files:
-            for i in range(1, len(db_dirname_scheme.split('/'))):
-                if os.path.join(root,file).split('/')[-i] ==\
-                                            db_dirname_scheme.split('/')[-i]:
+            if os.path.join(root,file)[-len(db_dirname_scheme):] ==\
+                                                            db_dirname_scheme:
                     result.append(os.path.join(root,file))
 
     return result
