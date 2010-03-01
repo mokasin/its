@@ -1,0 +1,9 @@
+Junk
+keyword1
+nonjunk
+
+2_mail_x:1
+2_mail_spam:2
+2_mail_spam_x:1 0
+2_mail_ham:2
+2_mail_both:0 2
